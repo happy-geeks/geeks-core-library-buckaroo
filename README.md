@@ -1,2 +1,2 @@
-# geeks-core-library-buckaroo
-Connection with Buckaroo for the GeeksCoreLibrary
+# GeeksCoreLibrary - Buckaroo
+Buckaroo plugin for the order process of the GeeksCoreLibrary.
