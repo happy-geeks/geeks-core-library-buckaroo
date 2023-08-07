@@ -203,13 +203,13 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         var invoiceNumber = "";
         if (httpContextAccessor.HttpContext.Request.HasFormContentType)
         {
-            invoiceNumber = httpContextAccessor.HttpContext.Request.Form["brq_invoicenumber"].ToString();
+            invoiceNumber = httpContextAccessor.HttpContext.Request.Form[BuckarooConstants.WebhookInvoiceNumberProperty].ToString();
         }
 
         // If the invoice number is still empty, try to get it from the query string.
         if (String.IsNullOrEmpty(invoiceNumber))
         {
-            invoiceNumber = httpContextAccessor.HttpContext.Request.Query["brq_invoicenumber"].ToString();
+            invoiceNumber = httpContextAccessor.HttpContext.Request.Query[BuckarooConstants.WebhookInvoiceNumberProperty].ToString();
         }
 
         if (String.IsNullOrWhiteSpace(invoiceNumber))
