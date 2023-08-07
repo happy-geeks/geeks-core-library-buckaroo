@@ -2,6 +2,8 @@
 
 public class Constants
 {
+    public const string WebhookInvoiceNumberProperty = "brq_invoicenumber";
+
     public const string BuckarooWebsiteKeyLiveProperty = "buckaroowebsitekeylive";
 
     public const string BuckarooWebsiteKeyTestProperty = "buckaroowebsitekeytest";

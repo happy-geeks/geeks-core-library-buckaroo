@@ -14,6 +14,9 @@
       <ProjectReference Include="..\..\GeeksCoreLibrary\GeeksCoreLibrary\GeeksCoreLibrary.csproj" />
     </ItemGroup>
 
+	<ItemGroup>
+      <PackageReference Include="BuckarooSDK" Version="1.4.1" />
+	</ItemGroup>
 
 
 </Project>

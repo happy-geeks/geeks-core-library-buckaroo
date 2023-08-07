@@ -1,5 +1,5 @@
 ﻿using GeeksCoreLibrary.Components.OrderProcess.Models;
-using GeeksCoreLibrary.Modules.Payments.Enums.Buckaroo;
+using GeeksCoreLibrary.Modules.Payments.Buckaroo.Enums;
 
 namespace GeeksCoreLibrary.Modules.Payments.Buckaroo.Models
 {
