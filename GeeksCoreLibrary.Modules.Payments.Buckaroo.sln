@@ -1,8 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
+# 
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeeksCoreLibrary.Modules.Payments.Buckaroo", "GeeksCoreLibrary.Modules.Payments.Buckaroo\GeeksCoreLibrary.Modules.Payments.Buckaroo.csproj", "{C45036C2-A151-4216-AF25-6E0F86F9F353}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeeksCoreLibrary", "..\GeeksCoreLibrary\GeeksCoreLibrary\GeeksCoreLibrary.csproj", "{1FA6CA66-A494-4CE0-B342-A9736C062DD3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,9 +13,5 @@ Global
 		{C45036C2-A151-4216-AF25-6E0F86F9F353}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C45036C2-A151-4216-AF25-6E0F86F9F353}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C45036C2-A151-4216-AF25-6E0F86F9F353}.Release|Any CPU.Build.0 = Release|Any CPU
-		{1FA6CA66-A494-4CE0-B342-A9736C062DD3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{1FA6CA66-A494-4CE0-B342-A9736C062DD3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{1FA6CA66-A494-4CE0-B342-A9736C062DD3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{1FA6CA66-A494-4CE0-B342-A9736C062DD3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
