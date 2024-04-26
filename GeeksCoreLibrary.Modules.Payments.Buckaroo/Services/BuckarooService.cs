@@ -309,9 +309,9 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
     }
 
     /// <inheritdoc />
-    public string GetInvoiceNumberFromRequest()
+    public Task<string> GetInvoiceNumberFromRequestAsync()
     {
-        return HttpContextHelpers.GetRequestValue(httpContextAccessor?.HttpContext, BuckarooConstants.WebhookInvoiceNumberProperty);
+        return Task.FromResult(HttpContextHelpers.GetRequestValue(httpContextAccessor?.HttpContext, BuckarooConstants.WebhookInvoiceNumberProperty));
     }
 
     /// <summary>
