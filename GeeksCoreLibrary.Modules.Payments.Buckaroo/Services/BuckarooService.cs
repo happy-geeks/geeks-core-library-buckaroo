@@ -99,9 +99,6 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         switch (paymentMethodSettings.ExternalName.ToUpperInvariant())
         {
             case "IDEAL":
-                serviceTransaction = await InitializeIdealInThreePaymentAsync(transaction, shoppingBaskets, basketSettings, userDetails);
-                break;
-            case "IDEAL2":
                 serviceTransaction = InitializeIdealPayment(transaction, shoppingBaskets);
                 break;
             case "MASTERCARD":
@@ -116,8 +113,8 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
             case "BANCONTACT":
                 serviceTransaction = InitializeBancontactPayment(transaction);
                 break;
-            case "IN_THREE":
-                serviceTransaction = await InitializeIdealInThreePaymentAsync(transaction, shoppingBaskets, basketSettings, userDetails);
+            case "IDEAL_IN_THREE":
+                serviceTransaction = await InitializeIdealInThreePaymentAsync(transaction, shoppingBaskets, basketSettings);
                 break;
             default:
                 return new PaymentRequestResult
@@ -151,11 +148,53 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         };
     }
 
-    private async Task<ConfiguredServiceTransaction> InitializeIdealInThreePaymentAsync(ConfiguredTransaction transaction, ICollection<(WiserItemModel Main, List<WiserItemModel> Lines)> shoppingBaskets, ShoppingBasketCmsSettingsModel basketSettings, WiserItemModel userDetails)
+    private async Task<ConfiguredServiceTransaction> InitializeIdealInThreePaymentAsync(ConfiguredTransaction transaction, ICollection<(WiserItemModel Main, List<WiserItemModel> Lines)> shoppingBaskets, ShoppingBasketCmsSettingsModel basketSettings)
     {
         var request = new InThreePayRequest
         {
             Articles = new ParameterGroupCollection<Article>("Article")
+        };
+        
+        var firstBasket = shoppingBaskets.First().Main;
+
+        var street = firstBasket.GetDetailValue("street");
+        var streetNumber = firstBasket.GetDetailValue("housenumber");
+        var streetNumberSuffix = firstBasket.GetDetailValue("housenumber_suffix");
+        var zipcode = firstBasket.GetDetailValue("zipcode");
+        var city = firstBasket.GetDetailValue("city");
+        var countryCode = firstBasket.GetDetailValue("country").ToUpperInvariant();
+
+        request.BillingCustomer = new BillingCustomer
+        {
+            CustomerNumber = firstBasket.Id.ToString(),
+            FirstName = firstBasket.GetDetailValue("firstname"),
+            LastName = firstBasket.GetDetailValue("lastname"),
+            Email = firstBasket.GetDetailValue("email"),
+            Phone = firstBasket.GetDetailValue("phone"),
+            Street = street,
+            StreetNumber = streetNumber,
+            StreetNumberSuffix = streetNumberSuffix,
+            PostalCode = zipcode,
+            City = city,
+            CountryCode = countryCode.ToUpperInvariant(),
+            CompanyName = firstBasket.GetDetailValue("companyname"),
+            Category = String.IsNullOrEmpty(firstBasket.GetDetailValue("companyname")) ? "B2C" : "B2B"
+        };
+
+        var shippingPrefix = String.Empty;
+        if (!String.IsNullOrEmpty(firstBasket.GetDetailValue("shipping_zipcode")))
+        {
+            shippingPrefix = "shipping_";
+        }
+        
+        request.ShippingCustomer = new ShippingCustomer()
+        {
+            Street = firstBasket.GetDetailValue($"{shippingPrefix}street") ?? street,
+            StreetNumber = firstBasket.GetDetailValue($"{shippingPrefix}housenumber") ?? streetNumber,
+            PostalCode = firstBasket.GetDetailValue($"{shippingPrefix}zipcode") ?? zipcode,
+            StreetNumberSuffix = firstBasket.GetDetailValue($"{shippingPrefix}housenumber_suffix") ?? streetNumberSuffix,
+            City = firstBasket.GetDetailValue($"{shippingPrefix}city") ?? city,
+            CountryCode = firstBasket.GetDetailValue($"{shippingPrefix}country")?.ToUpperInvariant() ?? countryCode
         };
 
         foreach (var shoppingBasket in shoppingBaskets)
@@ -164,44 +203,13 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
             {
                 var article = new Article
                 {
-                    Description = basketLine.Title,
+                    Description = basketLine.GetDetailValue("Title") ?? basketLine.Title,
                     GrossUnitPrice = (await shoppingBasketsService.GetLinePriceAsync(shoppingBasket.Main, basketLine, basketSettings, singlePrice: true)).ToString("F2"),
                     Quantity = Convert.ToInt32(basketLine.GetDetailValue("quantity"))
                 };
                 request.Articles.Add(article);
             }
         }
-
-        var street = userDetails.GetDetailValue("street");
-        var streetNumber = userDetails.GetDetailValue("housenumber");
-        var streetNumberSuffix = userDetails.GetDetailValue("housenumber_suffix");
-        var zipcode = userDetails.GetDetailValue("zipcode");
-        var city = userDetails.GetDetailValue("city");
-        var countryCode = userDetails.GetDetailValue("country").ToUpperInvariant();
-
-        request.BillingCustomer = new BillingCustomer
-        {
-            CustomerNumber = userDetails.Id.ToString(),
-            FirstName = userDetails.GetDetailValue("firstname"),
-            LastName = userDetails.GetDetailValue("lastname"),
-            Email = userDetails.GetDetailValue("email"),
-            Phone = userDetails.GetDetailValue("phone"),
-            Street = street,
-            StreetNumber = streetNumber,
-            StreetNumberSuffix = streetNumberSuffix,
-            PostalCode = zipcode,
-            City = city,
-            CountryCode = countryCode.ToUpperInvariant()
-        };
-        
-        request.ShippingCustomer = new ShippingCustomer()
-        {
-            Street = userDetails.GetDetailValue("shipping_street") ?? street,
-            StreetNumber = userDetails.GetDetailValue("shipping_housenumber") ?? streetNumber,
-            StreetNumberSuffix = userDetails.GetDetailValue("shipping_housenumber_suffix") ?? streetNumberSuffix,
-            City = userDetails.GetDetailValue("shipping_city") ?? city,
-            CountryCode = userDetails.GetDetailValue("shipping_country")?.ToUpperInvariant() ?? countryCode
-        };
 
         return transaction.InThree()
             .Pay(request);
