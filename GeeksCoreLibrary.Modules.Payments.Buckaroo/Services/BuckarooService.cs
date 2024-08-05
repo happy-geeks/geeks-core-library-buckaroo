@@ -3,15 +3,19 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using BuckarooSdk.DataTypes;
+using BuckarooSdk.DataTypes.ParameterGroups.InThree;
 using BuckarooSdk.DataTypes.RequestBases;
+using BuckarooSdk.Services;
 using BuckarooSdk.Services.CreditCards.BanContact.Request;
 using BuckarooSdk.Services.CreditCards.Request;
 using BuckarooSdk.Services.Ideal.TransactionRequest;
+using BuckarooSdk.Services.InThree;
 using BuckarooSdk.Services.PayPal;
 using BuckarooSdk.Transaction;
 using GeeksCoreLibrary.Components.OrderProcess.Models;
 using GeeksCoreLibrary.Components.ShoppingBasket;
 using GeeksCoreLibrary.Components.ShoppingBasket.Interfaces;
+using GeeksCoreLibrary.Components.ShoppingBasket.Models;
 using GeeksCoreLibrary.Core.DependencyInjection.Interfaces;
 using GeeksCoreLibrary.Core.Enums;
 using GeeksCoreLibrary.Core.Extensions;
@@ -109,6 +113,9 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
             case "BANCONTACT":
                 serviceTransaction = InitializeBancontactPayment(transaction);
                 break;
+            case "IDEAL_IN_THREE":
+                serviceTransaction = await InitializeIdealInThreePaymentAsync(transaction, shoppingBaskets, basketSettings);
+                break;
             default:
                 return new PaymentRequestResult
                 {
@@ -141,10 +148,77 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         };
     }
 
+    private async Task<ConfiguredServiceTransaction> InitializeIdealInThreePaymentAsync(ConfiguredTransaction transaction, ICollection<(WiserItemModel Main, List<WiserItemModel> Lines)> shoppingBaskets, ShoppingBasketCmsSettingsModel basketSettings)
+    {
+        var request = new InThreePayRequest
+        {
+            Articles = new ParameterGroupCollection<Article>("Article")
+        };
+        
+        var firstBasket = shoppingBaskets.First().Main;
+
+        var street = firstBasket.GetDetailValue("street");
+        var streetNumber = firstBasket.GetDetailValue("housenumber");
+        var streetNumberSuffix = firstBasket.GetDetailValue("housenumber_suffix");
+        var zipcode = firstBasket.GetDetailValue("zipcode");
+        var city = firstBasket.GetDetailValue("city");
+        var countryCode = firstBasket.GetDetailValue("country").ToUpperInvariant();
+
+        request.BillingCustomer = new BillingCustomer
+        {
+            CustomerNumber = firstBasket.Id.ToString(),
+            FirstName = firstBasket.GetDetailValue("firstname"),
+            LastName = firstBasket.GetDetailValue("lastname"),
+            Email = firstBasket.GetDetailValue("email"),
+            Phone = firstBasket.GetDetailValue("phone"),
+            Street = street,
+            StreetNumber = streetNumber,
+            StreetNumberSuffix = streetNumberSuffix,
+            PostalCode = zipcode,
+            City = city,
+            CountryCode = countryCode.ToUpperInvariant(),
+            CompanyName = firstBasket.GetDetailValue("companyname"),
+            Category = String.IsNullOrEmpty(firstBasket.GetDetailValue("companyname")) ? "B2C" : "B2B"
+        };
+
+        var shippingPrefix = String.Empty;
+        if (!String.IsNullOrEmpty(firstBasket.GetDetailValue("shipping_zipcode")))
+        {
+            shippingPrefix = "shipping_";
+        }
+        
+        request.ShippingCustomer = new ShippingCustomer()
+        {
+            Street = firstBasket.GetDetailValue($"{shippingPrefix}street") ?? street,
+            StreetNumber = firstBasket.GetDetailValue($"{shippingPrefix}housenumber") ?? streetNumber,
+            PostalCode = firstBasket.GetDetailValue($"{shippingPrefix}zipcode") ?? zipcode,
+            StreetNumberSuffix = firstBasket.GetDetailValue($"{shippingPrefix}housenumber_suffix") ?? streetNumberSuffix,
+            City = firstBasket.GetDetailValue($"{shippingPrefix}city") ?? city,
+            CountryCode = firstBasket.GetDetailValue($"{shippingPrefix}country")?.ToUpperInvariant() ?? countryCode
+        };
+
+        foreach (var shoppingBasket in shoppingBaskets)
+        {
+            foreach (var basketLine in shoppingBasket.Lines)
+            {
+                var article = new Article
+                {
+                    Description = basketLine.GetDetailValue("Title") ?? basketLine.Title,
+                    GrossUnitPrice = (await shoppingBasketsService.GetLinePriceAsync(shoppingBasket.Main, basketLine, basketSettings, singlePrice: true)).ToString("F2"),
+                    Quantity = Convert.ToInt32(basketLine.GetDetailValue("quantity"))
+                };
+                request.Articles.Add(article);
+            }
+        }
+
+        return transaction.InThree()
+            .Pay(request);
+    }
+
     private ConfiguredServiceTransaction InitializeIdealPayment(ConfiguredTransaction transaction, IEnumerable<(WiserItemModel Main, List<WiserItemModel> Lines)> shoppingBaskets)
     {
         // Bank name.
-        var issuerValue = shoppingBaskets.First().Main.GetDetailValue(Components.OrderProcess.Models.Constants.PaymentMethodIssuerProperty);
+        var issuerValue = shoppingBaskets.First().Main.GetDetailValue(Constants.PaymentMethodIssuerProperty);
         var issuerName = GetIssuerName(issuerValue);
 
         return transaction.Ideal()
