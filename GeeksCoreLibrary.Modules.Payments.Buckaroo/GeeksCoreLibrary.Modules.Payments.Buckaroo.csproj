@@ -13,6 +13,6 @@
 
 	<ItemGroup>
       <PackageReference Include="BuckarooSDK" Version="1.5.3" />
-      <PackageReference Include="GeeksCoreLibrary" Version="4.2.20" />
+      <PackageReference Include="GeeksCoreLibrary" Version="4.2.21" />
 	</ItemGroup>
 </Project>
