@@ -37,28 +37,18 @@ using Constants = GeeksCoreLibrary.Components.OrderProcess.Models.Constants;
 namespace GeeksCoreLibrary.Modules.Payments.Buckaroo.Services;
 
 /// <inheritdoc cref="IPaymentServiceProviderService" />
-public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServiceProviderService, IScopedService
+public class BuckarooService(
+    ILogger<BuckarooService> logger,
+    IOptions<GclSettings> gclSettings,
+    IShoppingBasketsService shoppingBasketsService,
+    IDatabaseConnection databaseConnection,
+    IDatabaseHelpersService databaseHelpersService,
+    IHttpContextAccessor httpContextAccessor = null)
+    : PaymentServiceProviderBaseService(databaseHelpersService, databaseConnection, logger, httpContextAccessor), IPaymentServiceProviderService, IScopedService
 {
-    private readonly ILogger<BuckarooService> logger;
-    private readonly GclSettings gclSettings;
-    private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly IShoppingBasketsService shoppingBasketsService;
-    private readonly IDatabaseConnection databaseConnection;
-
-    public BuckarooService(ILogger<BuckarooService> logger,
-                           IOptions<GclSettings> gclSettings,
-                           IShoppingBasketsService shoppingBasketsService,
-                           IDatabaseConnection databaseConnection,
-                           IDatabaseHelpersService databaseHelpersService,
-                           IHttpContextAccessor httpContextAccessor = null)
-        : base(databaseHelpersService, databaseConnection, logger, httpContextAccessor)
-    {
-        this.logger = logger;
-        this.gclSettings = gclSettings.Value;
-        this.httpContextAccessor = httpContextAccessor;
-        this.shoppingBasketsService = shoppingBasketsService;
-        this.databaseConnection = databaseConnection;
-    }
+    private readonly GclSettings gclSettings = gclSettings.Value;
+    private readonly IHttpContextAccessor httpContextAccessor = httpContextAccessor;
+    private readonly IDatabaseConnection databaseConnection = databaseConnection;
 
     /// <inheritdoc />
     public async Task<PaymentRequestResult> HandlePaymentRequestAsync(ICollection<(WiserItemModel Main, List<WiserItemModel> Lines)> shoppingBaskets, WiserItemModel userDetails, PaymentMethodSettingsModel paymentMethodSettings, string invoiceNumber)
@@ -154,7 +144,7 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         {
             Articles = new ParameterGroupCollection<Article>("Article")
         };
-        
+
         var firstBasket = shoppingBaskets.First().Main;
 
         var street = firstBasket.GetDetailValue("street");
@@ -186,7 +176,7 @@ public class BuckarooService : PaymentServiceProviderBaseService, IPaymentServic
         {
             shippingPrefix = "shipping_";
         }
-        
+
         request.ShippingCustomer = new ShippingCustomer()
         {
             Street = firstBasket.GetDetailValue($"{shippingPrefix}street") ?? street,

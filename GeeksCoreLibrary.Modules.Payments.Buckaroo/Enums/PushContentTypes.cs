@@ -9,6 +9,7 @@ public enum PushContentTypes
     /// The push request is in JSON format.
     /// </summary>
     Json = 1,
+
     /// <summary>
     /// The push request is comprised of form data.
     /// </summary>
