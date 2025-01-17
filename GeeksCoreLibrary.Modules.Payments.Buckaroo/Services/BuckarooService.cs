@@ -43,11 +43,11 @@ public class BuckarooService(
     IShoppingBasketsService shoppingBasketsService,
     IDatabaseConnection databaseConnection,
     IDatabaseHelpersService databaseHelpersService,
-    IHttpContextAccessor httpContextAccessor = null)
+    IHttpContextAccessor? httpContextAccessor = null)
     : PaymentServiceProviderBaseService(databaseHelpersService, databaseConnection, logger, httpContextAccessor), IPaymentServiceProviderService, IScopedService
 {
     private readonly GclSettings gclSettings = gclSettings.Value;
-    private readonly IHttpContextAccessor httpContextAccessor = httpContextAccessor;
+    private readonly IHttpContextAccessor? httpContextAccessor = httpContextAccessor;
     private readonly IDatabaseConnection databaseConnection = databaseConnection;
 
     /// <inheritdoc />
@@ -286,8 +286,8 @@ public class BuckarooService(
             };
         }
 
-        string bodyJson = null;
-        StatusUpdateResult result = null;
+        string? bodyJson = null;
+        var result = new StatusUpdateResult();
 
         try
         {
@@ -303,7 +303,7 @@ public class BuckarooService(
                     break;
                 }
                 case PushContentTypes.HttpPost:
-                    result = HandleFormStatusUpdate(buckarooSettings, invoiceNumber);
+                    result = HandleFormStatusUpdate(buckarooSettings);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException($"Unknown push content type '{buckarooSettings.PushContentType}'");
@@ -430,11 +430,10 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
     /// Handles the status update using form values.
     /// </summary>
     /// <param name="buckarooSettings">The settings for Buckaroo.</param>
-    /// <param name="invoiceNumber">The payment's invoice number.</param>
     /// <returns>A <see cref="StatusUpdateResult"/> object.</returns>
-    private StatusUpdateResult HandleFormStatusUpdate(BuckarooSettingsModel buckarooSettings, string invoiceNumber)
+    private StatusUpdateResult HandleFormStatusUpdate(BuckarooSettingsModel buckarooSettings)
     {
-        if (httpContextAccessor.HttpContext == null)
+        if (httpContextAccessor?.HttpContext == null)
         {
             return new StatusUpdateResult
             {
@@ -504,14 +503,14 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
 
     #region Helper functions
 
-    private string GetIssuerName(string issuerValue)
+    private string? GetIssuerName(string issuerValue)
     {
         var buckarooIssuerConstants = typeof(BuckarooSdk.Services.Ideal.Constants.Issuers).GetFields(BindingFlags.Public | BindingFlags.Static);
         var issuerConstant = buckarooIssuerConstants.FirstOrDefault(mi => mi.Name.Equals(issuerValue, StringComparison.OrdinalIgnoreCase));
 
         if (issuerConstant != null)
         {
-            return (string) issuerConstant.GetValue(null);
+            return issuerConstant.GetValue(null) as string;
         }
 
         // Check for legacy types (which were numbers).
