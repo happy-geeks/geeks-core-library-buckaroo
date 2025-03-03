@@ -265,9 +265,11 @@ public class BuckarooService(
 
         // Try to get the invoice number from the form.
         var invoiceNumber = "";
+        IFormCollection? form = null;
         if (httpContextAccessor.HttpContext.Request.HasFormContentType)
         {
-            invoiceNumber = httpContextAccessor.HttpContext.Request.Form[BuckarooConstants.WebhookInvoiceNumberProperty].ToString();
+            form = await httpContextAccessor.HttpContext.Request.ReadFormAsync();
+            invoiceNumber = form[BuckarooConstants.WebhookInvoiceNumberProperty].ToString();
         }
 
         // If the invoice number is still empty, try to get it from the query string.
@@ -303,7 +305,14 @@ public class BuckarooService(
                     break;
                 }
                 case PushContentTypes.HttpPost:
-                    result = HandleFormStatusUpdate(buckarooSettings);
+                    if (!httpContextAccessor.HttpContext.Request.HasFormContentType)
+                    {
+                        throw new InvalidOperationException("Request is not a form-encoded request, yet the push content type is set to 'HttpPost'.");
+                    }
+                    result = await HandleFormStatusUpdateAsync(buckarooSettings, form);
+                    break;
+                case PushContentTypes.HttpGet:
+                    result = HandleQueryStatusUpdateAsync(buckarooSettings);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException($"Unknown push content type '{buckarooSettings.PushContentType}'");
@@ -430,8 +439,9 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
     /// Handles the status update using form values.
     /// </summary>
     /// <param name="buckarooSettings">The settings for Buckaroo.</param>
+    /// <param name="form">The form collection from the request.</param>
     /// <returns>A <see cref="StatusUpdateResult"/> object.</returns>
-    private StatusUpdateResult HandleFormStatusUpdate(BuckarooSettingsModel buckarooSettings)
+    private async Task<StatusUpdateResult> HandleFormStatusUpdateAsync(BuckarooSettingsModel buckarooSettings, IFormCollection? form)
     {
         if (httpContextAccessor?.HttpContext == null)
         {
@@ -442,8 +452,10 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
                 Successful = false
             };
         }
+        
+        form ??= await httpContextAccessor.HttpContext.Request.ReadFormAsync();
 
-        if (!Int32.TryParse(httpContextAccessor.HttpContext.Request.Form["brq_statuscode"].ToString(), out var statusCode))
+        if (!Int32.TryParse(form["brq_statuscode"].ToString(), out var statusCode))
         {
             return new StatusUpdateResult
             {
@@ -452,35 +464,16 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
                 Successful = false
             };
         }
+        var buckarooSignature = form["brq_signature"].ToString();
 
         // Get all form values that begin with "brq_", "add_" or "cust_", except "brq_signature".
-        var formValues = httpContextAccessor.HttpContext.Request.Form.Where(kvp => !kvp.Key.Equals("brq_signature") && (kvp.Key.StartsWith("brq_") || kvp.Key.StartsWith("add_") || kvp.Key.StartsWith("cust_"))).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
-        var buckarooSignature = httpContextAccessor.HttpContext.Request.Form["brq_signature"].ToString();
-
-        // Sort the formValues dictionary alphabetically by key.
-        formValues = formValues.OrderBy(kvp => kvp.Key).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        var signatureBuilder = new StringBuilder();
-        foreach (var formValue in formValues)
-        {
-            signatureBuilder.Append($"{formValue.Key}={formValue.Value}");
-        }
-
-        if (!String.IsNullOrWhiteSpace(buckarooSettings.SecretKey))
-        {
-            signatureBuilder.Append(buckarooSettings.SecretKey);
-        }
-
-        // Hash the signature builder with SHA1.
-        var hash = buckarooSettings.HashMethod switch
-        {
-            HashMethods.Sha1 => SHA1.HashData(Encoding.UTF8.GetBytes(signatureBuilder.ToString())),
-            HashMethods.Sha256 => SHA256.HashData(Encoding.UTF8.GetBytes(signatureBuilder.ToString())),
-            HashMethods.Sha512 => SHA512.HashData(Encoding.UTF8.GetBytes(signatureBuilder.ToString())),
-            _ => throw new ArgumentOutOfRangeException($"Hash method '{buckarooSettings.HashMethod}' is not supported.")
-        };
-
-        var signatureHash = BitConverter.ToString(hash).Replace("-", "").ToLower();
+        var signatureValues = form
+            .Where(kvp =>
+                !kvp.Key.Equals("brq_signature") && (kvp.Key.StartsWith("brq_") || kvp.Key.StartsWith("add_") ||
+                                                     kvp.Key.StartsWith("cust_")))
+            .Select(kvp => (kvp.Key, Value: kvp.Value.ToString()))
+            .OrderBy(kvp => kvp.Key);
+        var signatureHash = GenerateSignature(buckarooSettings, signatureValues);
 
         // Compare hashes.
         if (String.Equals(buckarooSignature, signatureHash, StringComparison.OrdinalIgnoreCase))
@@ -501,9 +494,62 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
         };
     }
 
+    private StatusUpdateResult HandleQueryStatusUpdateAsync(BuckarooSettingsModel buckarooSettings)
+    {
+        if (httpContextAccessor?.HttpContext == null)
+        {
+            return new StatusUpdateResult
+            {
+                Status = "No HTTP context available; unable to process status update.",
+                StatusCode = 0,
+                Successful = false
+            };
+        }
+
+        var queryParams = httpContextAccessor.HttpContext.Request.Query;
+
+        if (!Int32.TryParse(queryParams["brq_statuscode"].ToString(), out var statusCode))
+        {
+            return new StatusUpdateResult
+            {
+                Status = $"Invalid status code '{statusCode}'",
+                StatusCode = statusCode,
+                Successful = false
+            };
+        }
+        
+        // Get all form values that begin with "brq_", "add_" or "cust_", except "brq_signature".
+        var buckarooSignature = queryParams["brq_signature"].ToString();
+
+        // Sort the formValues dictionary alphabetically by key.
+        var queryValues = queryParams
+            .Where(kvp => !kvp.Key.Equals("brq_signature") && (kvp.Key.StartsWith("brq_") || kvp.Key.StartsWith("add_") || kvp.Key.StartsWith("cust_")))
+            .Select(kvp => (kvp.Key, Value: kvp.Value.ToString()))
+            .OrderBy(kvp => kvp.Key);
+        var signatureHash = GenerateSignature(buckarooSettings, queryValues);
+
+        // Compare hashes.
+        if (String.Equals(buckarooSignature, signatureHash, StringComparison.OrdinalIgnoreCase))
+        {
+            return new StatusUpdateResult
+            {
+                Status = queryParams["brq_statusmessage"].ToString(),
+                StatusCode = statusCode,
+                Successful = statusCode.InList(190, 790)
+            };
+        }
+
+        return new StatusUpdateResult
+        {
+            Status = "Signature was incorrect.",
+            StatusCode = statusCode,
+            Successful = false
+        };
+    }
+
     #region Helper functions
 
-    private string? GetIssuerName(string issuerValue)
+    private static string? GetIssuerName(string issuerValue)
     {
         var buckarooIssuerConstants = typeof(BuckarooSdk.Services.Ideal.Constants.Issuers).GetFields(BindingFlags.Public | BindingFlags.Static);
         var issuerConstant = buckarooIssuerConstants.FirstOrDefault(mi => mi.Name.Equals(issuerValue, StringComparison.OrdinalIgnoreCase));
@@ -532,6 +578,33 @@ AND paymentServiceProvider.entity_type = '{Constants.PaymentServiceProviderEntit
             "12" => BuckarooSdk.Services.Ideal.Constants.Issuers.Bunq,
             _ => null
         })!;
+    }
+    
+    private static string GenerateSignature(BuckarooSettingsModel buckarooSettings, IOrderedEnumerable<(string Key, string Value)> signatureValues)
+    {
+        var signatureBuilder = new StringBuilder();
+        foreach (var value in signatureValues)
+        {
+            signatureBuilder.Append($"{value.Key}={value.Value}");
+        }
+
+        if (!String.IsNullOrWhiteSpace(buckarooSettings.SecretKey))
+        {
+            signatureBuilder.Append(buckarooSettings.SecretKey);
+        }
+        
+        var generatedSignature = signatureBuilder.ToString();
+        
+        // Hash the signature builder with SHA1.
+        var hash = buckarooSettings.HashMethod switch
+        {
+            HashMethods.Sha1 => SHA1.HashData(Encoding.UTF8.GetBytes(generatedSignature)),
+            HashMethods.Sha256 => SHA256.HashData(Encoding.UTF8.GetBytes(generatedSignature)),
+            HashMethods.Sha512 => SHA512.HashData(Encoding.UTF8.GetBytes(generatedSignature)),
+            _ => throw new ArgumentOutOfRangeException($"Hash method '{buckarooSettings.HashMethod}' is not supported.")
+        };
+
+        return Convert.ToHexStringLower(hash);
     }
 
     #endregion
